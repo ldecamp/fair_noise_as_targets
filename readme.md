@@ -52,9 +52,9 @@ regular interval to evaluate the performance of the learnt feature space.
 
 #### Further work
 
-1. move hungarian algorithm computation to GPU (Speed up drastically learning on large batches)
-2. support imagenet & custom image datasets.
-3. add feature space visualisation notebook (classify samples & run NN clustering)
+1. move hungarian algorithm computation to GPU (Speed up drastically learning on large batches) : https://github.com/tdedecko/hungarian-algorithm
+2. add feature space visualisation notebook (classify samples & run NN clustering)
+3. Train with extra unsupervised objective (MTL from unsupervised tasks
 
 
 

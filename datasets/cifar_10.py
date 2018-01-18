@@ -1,14 +1,10 @@
 #!/usr/bin/python
 import numpy as np
-from typing import Callable, List, Tuple
+from typing import List, Tuple
 
-# import torch.multiprocessing
-
-import torch
-from torch.utils import data
-from torch.utils.data.sampler import Sampler, BatchSampler, RandomSampler, SequentialSampler
 from torchvision.datasets import CIFAR10
-from torch.utils.data.dataloader import pin_memory_batch, default_collate
+
+from core.dataloader import DataLoader
 
 from datasets.utils import generate_random_targets
 from datasets.interface import DynamicTargetDataset
@@ -58,90 +54,22 @@ class NatCIFAR10(CIFAR10, DynamicTargetDataset):
             self.test_nat[indexes, :] = new_targets
 
 
-class NatDataLoaderIter(object):
-    """
-    Defines a data loader iterator that returns minibatch as well as the items index in the dataframe.
-
-    Doesn't support multi processing yet. Need to work on target sync first.
-    TODO: Add multi processing support.
-    """
-
-    def __init__(self, loader) -> None:
-        self.dataset = loader.dataset
-        self.collate_fn = loader.collate_fn
-        self.batch_sampler = loader.batch_sampler
-        self.pin_memory = loader.pin_memory
-
-        self.sample_iter = iter(self.batch_sampler)
-
-    def __len__(self) -> int:
-        return len(self.batch_sampler)
-
-    def __next__(self) -> Tuple[List[int], torch.FloatTensor, torch.FloatTensor]:
-        indices = next(self.sample_iter)  # may raise StopIteration
-        batch = self.collate_fn([self.dataset[i] for i in indices])
-        if self.pin_memory:
-            batch = pin_memory_batch(batch)
-        return [indices]+batch
-
-    def __iter__(self):
-        return self
-
-
-class NatDataLoader(object):
-
-    def __init__(self,
-                 dataset: data.Dataset,
-                 batch_size: int=1,
-                 shuffle: bool=False,
-                 sampler: Sampler=None,
-                 batch_sampler: Sampler=None,
-                 collate_fn: Callable=default_collate,
-                 pin_memory: bool=False,
-                 drop_last: bool=False):
-        self.dataset = dataset
-        self.batch_size = batch_size
-        self.collate_fn = collate_fn
-        self.pin_memory = pin_memory
-        self.drop_last = drop_last
-
-        if batch_sampler is not None:
-            if batch_size > 1 or shuffle or sampler is not None or drop_last:
-                raise ValueError('batch_sampler is mutually exclusive with '
-                                 'batch_size, shuffle, sampler, and drop_last')
-
-        if sampler is not None and shuffle:
-            raise ValueError('sampler is mutually exclusive with shuffle')
-
-        if batch_sampler is None:
-            if sampler is None:
-                if shuffle:
-                    sampler = RandomSampler(dataset)
-                else:
-                    sampler = SequentialSampler(dataset)
-            batch_sampler = BatchSampler(sampler, batch_size, drop_last)
-        self.sampler = sampler
-        self.batch_sampler = batch_sampler
-
-    def __iter__(self):
-        return NatDataLoaderIter(self)
-
-    def __len__(self) -> int:
-        return len(self.batch_sampler)
-
-
 if __name__ == '__main__':
     import torchvision.transforms as transforms
-    # Dataset already standardized [0;1]
     transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        transforms.Lambda(lambda img: img.convert('L')),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),  # Does [0; 1] Standardisation
     ])
 
     trainset = NatCIFAR10(root='./data', train=True,
                           download=True, transform=transform)
 
-    dl_train = NatDataLoader(trainset, batch_size=2, shuffle=True)
+    dl_train = DataLoader(trainset,
+                          batch_size=2,
+                          shuffle=True,
+                          num_workers=2,
+                          pin_memory=False)
 
     # Test streaming and override targets.
     for i in range(2):
